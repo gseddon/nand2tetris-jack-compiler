@@ -9,5 +9,6 @@ defmodule Mix.Tasks.JackCompiler do
       {file_name, line_count} = Parser.load_file(input_file)
       Logger.info("Loaded #{file_name} with #{line_count} lines.")
       Parser.dump_lines(file_name)
+      Logger.info("Does it have more commands? #{inspect Parser.has_more_commands?()}")
     end
 end

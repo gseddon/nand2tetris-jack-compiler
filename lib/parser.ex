@@ -19,10 +19,14 @@ defmodule JackCompiler.Parser do
     GenServer.call(__MODULE__, {:print, file_name})
   end
 
+  def has_more_commands?() do
+    GenServer.call(__MODULE__, {:has_more_commands})
+  end
+
   ## Server Callbacks
   @impl true
   def init(:ok) do
-    {:ok, %{}}
+    {:ok, %{current_file: nil}}
   end
 
   @impl true
@@ -31,7 +35,9 @@ defmodule JackCompiler.Parser do
     file_name = extract_vm_filename(file_path)
 
     lines = Enum.flat_map(IO.stream(file, :line), &clean_line/1)
-    state = Map.put(state, file_name, lines)
+    state = state
+    |> Map.put(file_name, lines)
+    |> Map.put(:current_file, file_name)
     {:reply, {file_name, Kernel.length(lines)}, state}
   end
 
@@ -42,6 +48,14 @@ defmodule JackCompiler.Parser do
     |> Enum.join("\n")
     |> IO.puts()
     {:reply, :ok, state}
+  end
+
+  def handle_call({:has_more_commands}, _from, state = %{current_file: file}) do
+    response = case state[file] do
+      [hd | _] -> true
+      _ -> false
+    end
+    {:reply, response, state}
   end
 
   defp clean_line(line) do
