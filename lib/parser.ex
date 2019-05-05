@@ -23,10 +23,30 @@ defmodule JackCompiler.Parser do
     GenServer.call(__MODULE__, {:has_more_commands})
   end
 
+  def advance() do
+    GenServer.call(__MODULE__, {:advance})
+  end
+
+  def command_type() do
+    GenServer.call(__MODULE__, {:command_type})
+  end
+
+  def arg1() do
+    GenServer.call(__MODULE__, {:arg, 1})
+  end
+
+  def arg2() do
+    GenServer.call(__MODULE__, {:arg, 2})
+  end
+
   ## Server Callbacks
   @impl true
   def init(:ok) do
-    {:ok, %{current_file: nil}}
+    {:ok, %{
+      current_file: nil,
+      current_command: nil,
+      command_type: nil
+    }}
   end
 
   @impl true
@@ -37,7 +57,7 @@ defmodule JackCompiler.Parser do
     lines = Enum.flat_map(IO.stream(file, :line), &clean_line/1)
     state = state
     |> Map.put(file_name, lines)
-    |> Map.put(:current_file, file_name)
+    |> Map.put(:current_file, lines)
     {:reply, {file_name, Kernel.length(lines)}, state}
   end
 
@@ -50,12 +70,42 @@ defmodule JackCompiler.Parser do
     {:reply, :ok, state}
   end
 
+  @impl true
   def handle_call({:has_more_commands}, _from, state = %{current_file: file}) do
-    response = case state[file] do
-      [hd | _] -> true
-      _ -> false
-    end
-    {:reply, response, state}
+    {:reply, not Enum.empty?(file), state}
+  end
+
+  @impl true
+  def handle_call({:advance}, _from, state = %{current_file: [next | tl]}) do
+    state = state
+      |> Map.put(:current_file, tl)
+      |> Map.put(:current_command, next)
+    {:reply, next, state}
+  end
+
+  @impl true
+  def handle_call({:command_type}, _from, state = %{current_command: command}) do
+    type =
+      case command do
+        "push" <> _ -> :push
+        "pop" <> _  -> :pop
+        _           -> :arithmetic
+      end
+    {:reply, type, %{state | command_type: type}}
+  end
+
+  @impl true
+  def handle_call({:arg, n}, _from, state = %{current_command: command, command_type: type}) do
+    arg =
+      case type do
+        :return ->
+          Process.exit("Cannot call arg from a return type")
+        :arithmetic when n == 1 ->
+          command
+        _ ->
+          String.split(command) |> Enum.at(n)
+      end
+    {:reply, arg, state}
   end
 
   defp clean_line(line) do
