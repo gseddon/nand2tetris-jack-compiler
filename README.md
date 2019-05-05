@@ -1,21 +1,30 @@
 # JackCompiler
 
-**TODO: Add description**
 
-## Installation
+ASM symbols:
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `jack_compiler` to your list of dependencies in `mix.exs`:
+| Symbol | Description |
+|--------|-------------|
+| SP     | Stack Pointer |
+| LCL    | local |
+| ARG    | argument |
+| THIS   | first half of pointer |
+| THAT   | second half of pointer |
+| R13-R15| Guessing we can just use these puppies |
+| Xxx.j  | Each static variable j in file XXX.vm is translated into the symbol Xxx.j. |
+| Control symbols | |
 
-```elixir
-def deps do
-  [
-    {:jack_compiler, "~> 0.1.0"}
-  ]
-end
-```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/jack_compiler](https://hexdocs.pm/jack_compiler).
+## RAM addresses
+| 0-15 | 16 virtual registers
+| 16-255 | static variables
+| 256-2047 | STack
+| 2048-16483 | Heap
+| 16384-24575 | Memory mapped I/O
 
+3 is this
+4 is that
+5 - 12 are temp
+pointer i should translate to 3 + i
+temp i should translate to 5 + i
+## Memory Segments Mapping
