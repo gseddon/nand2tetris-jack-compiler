@@ -1,18 +1,23 @@
 defmodule JackCompiler do
-  @moduledoc """
-  Documentation for JackCompiler.
-  """
+  use Application
 
-  @doc """
-  Hello world.
+  def start(_type, _args) do
+    JackCompiler.Supervisor.start_link(name: JackCompiler.Supervisor)
+  end
+end
 
-  ## Examples
+defmodule JackCompiler.Supervisor do
+  use Supervisor
 
-      iex> JackCompiler.hello()
-      :world
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, :ok, opts)
+  end
 
-  """
-  def hello do
-    :world
+  def init(:ok) do
+    children = [
+      JackCompiler.Parser
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
   end
 end

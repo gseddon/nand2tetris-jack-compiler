@@ -1,2 +1,3 @@
 .idea
-JackCompiler.iml
+*.iml
+_build
