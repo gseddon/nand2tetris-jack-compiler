@@ -15,7 +15,7 @@ defmodule JackCompiler.Supervisor do
 
   def init(:ok) do
     children = [
-      JackCompiler.Parser
+      JackCompiler.CodeWriter
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

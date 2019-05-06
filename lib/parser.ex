@@ -99,7 +99,7 @@ defmodule JackCompiler.Parser do
     arg =
       case type do
         :return ->
-          Process.exit("Cannot call arg from a return type")
+          Process.exit(self(), "Cannot call arg from a return type")
         :arithmetic when n == 1 ->
           command
         _ ->

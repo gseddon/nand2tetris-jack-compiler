@@ -3,9 +3,9 @@ defmodule StatelessJackCompiler do
   require Logger
 
   def compile_file(path) do
-    CodeWriter.set_file_name(file_path)
+    CodeWriter.set_file_name(path)
     {file_name, commands} = load_file(path)
-    Logger.info("Loaded #{file_name}")
+    IO.puts("Loaded #{file_name}")
     dump_lines(commands)
 
     commands
@@ -19,13 +19,13 @@ defmodule StatelessJackCompiler do
         {:arithmetic, command}
       type when is_atom(type) ->
         {type, arg1(type, command), arg2(type, command)}
-      other -> Process.exit("Haven't generated #{other} yet.")
+      other -> Process.exit(self(), "Haven't generated #{other} yet.")
     end
   end
 
   def load_file(path) do
-    {:ok, file} = File.open(file_path, [:read, :utf8] )
-    file_name = extract_vm_filename(file_path)
+    {:ok, file} = File.open(path, [:read, :utf8] )
+    file_name = extract_vm_filename(path)
 
     lines = Enum.flat_map(IO.stream(file, :line), &clean_line/1)
     {file_name, lines}
@@ -48,7 +48,7 @@ defmodule StatelessJackCompiler do
   def arg1(type, command) do
     case type do
       :return ->
-        Process.exit("Cannot call arg from a return type")
+        Process.exit(self(), "Cannot call arg from a return type")
       :arithmetic ->
         command
       _ ->
@@ -62,7 +62,7 @@ defmodule StatelessJackCompiler do
     case type do
       _ ->
         String.split(command)
-        |> Enum.at(1)
+        |> Enum.at(2)
         |> String.to_integer()
     end
   end
