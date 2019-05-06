@@ -6,9 +6,7 @@ defmodule Mix.Tasks.JackCompiler do
 
     def run([input_file | _]) do
       Application.ensure_all_started(:jack_compiler)
-      {file_name, line_count} = Parser.load_file(input_file)
-      Logger.info("Loaded #{file_name} with #{line_count} lines.")
-      Parser.dump_lines(file_name)
-      Logger.info("Does it have more commands? #{inspect Parser.has_more_commands?()}")
+
+      StatelessJackCompiler.compile_file(input_file)
     end
 end
