@@ -60,13 +60,51 @@ defmodule JackCompiler.CodeWriter do
   @impl true
   def handle_call({:push, segment, index}, _from, state) do
     case segment do
-      :constant -> {load_constant_to_ref(index, "SP") ++ # load constant to where SP points
-                   increment_sp(), state}
+      :constant ->
+        load_constant_to_ref(index, "SP") ++ # load constant to where SP points
+        increment_sp()
 
-      seg -> Process.exit(self(), "Segment #{seg} not defined.")
+      segment when segment in [:local, :argument, :this, :that] ->
+        ref =
+          case segment do
+            :local -> "LCL"
+            :argument -> "ARG"
+            :this -> "THIS"
+            :that -> "THAT"
+          end
+        load_to_d_from_ref_with_offset(ref, index) ++
+        push_d_to_stack()
+
+      :temp ->
+        ["D=M[#{index + 5}]"] ++
+        push_d_to_stack()
+
     end
-    |> write_commands()
+    |> write_commands(state)
   end
+
+  @impl true
+  def handle_call({:pop, segment, index}, _from, state) do
+    case segment do
+      segment when segment in [:local, :argument, :this, :that] ->
+        ref =
+          case segment do
+            :local -> "LCL"
+            :argument -> "ARG"
+            :this -> "THIS"
+            :that -> "THAT"
+          end
+        pop_to_d_from_stack() ++
+        store_d_to_ref_with_offset(ref, index)
+
+      :temp ->
+        pop_to_d_from_stack() ++
+        ["M[#{index + 5}]=D"]
+    end
+    |> write_commands(state)
+  end
+
+  def write_commands(commands, state), do: write_commands({commands, state})
 
   def write_commands({commands, state = %{output_file: file}}) do
     commands
@@ -120,7 +158,6 @@ defmodule JackCompiler.CodeWriter do
     # a random value every time
     salt = "#{fname}#{static}"
 
-
     # if our stack is like x | y | SP
     # gt is true if x > y
     # a.k.a. arg2 < arg1
@@ -169,6 +206,30 @@ defmodule JackCompiler.CodeWriter do
 
   def load_to_d_from_ref(from), do: ["A=M[#{from}]", "D=M"]
 
+  def load_to_d_from_ref_with_offset(from, offset) do
+    [
+      "@#{offset}",
+      "D=A",
+      "A=M[#{from}]",
+      "A=A+D",     # calculate ref + offset
+      "D=M"
+    ]
+  end
+
   def store_d_to_ref(to), do: ["A=M[#{to}]", "M=D"]
+
+  def store_d_to_ref_with_offset(to, offset) do
+    [
+      "M[R13]=D",   # save D in R13
+      "@#{offset}",
+      "D=A",
+      "A=M[#{to}]",
+      "D=A+D",
+      "M[R14]=D",  # calculate ref + offset and store in R14
+      "D=M[R13]",  # load D back from R13
+      "A=M[R14]",  # load ref + offset into A
+      "M=D"        # store original D into reference!
+    ]
+  end
 
 end
