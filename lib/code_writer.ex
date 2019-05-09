@@ -79,6 +79,15 @@ defmodule JackCompiler.CodeWriter do
         ["D=M[#{index + 5}]"] ++
         push_d_to_stack()
 
+      :pointer ->
+        which =
+         case index do
+           0 -> "THIS"
+           1 -> "THAT"
+         end
+        ["D=M[#{which}]"] ++
+        push_d_to_stack()
+
     end
     |> write_commands(state)
   end
@@ -100,6 +109,16 @@ defmodule JackCompiler.CodeWriter do
       :temp ->
         pop_to_d_from_stack() ++
         ["M[#{index + 5}]=D"]
+
+      :pointer ->
+        which =
+          case index do
+            0 -> "THIS"
+            1 -> "THAT"
+          end
+        pop_to_d_from_stack() ++
+        ["M[#{which}]=D"]
+
     end
     |> write_commands(state)
   end
