@@ -40,52 +40,17 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:arithmetic, operation},
-        _from,
-        state ) do
+  def handle_call({:arithmetic, operation}, _from, state) do
 
     case operation do
-      :add ->  {decrement_sp() ++
-               move_from_ref("SP", "R13") ++  # store arg2 in R13
-               pop_to_d_from_stack() ++       # load arg1 into D
-              ["A=M[R13]",                    # load arg2 into A (from R13)
-               "D=A+D"] ++                    # add arg1 and arg2 into D
-               push_d_to_stack(), state}
+      op when op in [:add, :sub, :or, :and] ->
+        perform_operation_on_two_stack_operands(op, state)
 
-      :sub -> {decrement_sp() ++
-              move_from_ref("SP", "R13") ++  # store arg2 in R13
-              pop_to_d_from_stack() ++       # load arg1 into D
-              ["A=M[R13]",                   # load arg2 into A (from R13)
-               "D=D-A"] ++                   # sub arg1 and arg2 into D
-              push_d_to_stack(), state}
-
-      :or ->  {decrement_sp() ++
-              move_from_ref("SP", "R13") ++  # store arg2 in R13
-              pop_to_d_from_stack() ++       # load arg1 into D
-              ["A=M[R13]",                   # load arg2 into A (from R13)
-               "D=A|D"] ++                   # or arg1 and arg2 into D
-              push_d_to_stack(), state}
-
-      :and -> {decrement_sp() ++
-              move_from_ref("SP", "R13") ++  # store arg2 in R13
-              pop_to_d_from_stack() ++       # load arg1 into D
-              ["A=M[R13]",                   # load arg2 into A (from R13)
-               "D=A&D"] ++                   # and arg1 and arg2 into D
-              push_d_to_stack(), state}
-
-      :neg -> {decrement_sp() ++
-              ["A=D",             # store newly decremented SP in A
-               "M=-M"] ++
-              increment_sp(), state}
-
-      :not ->{decrement_sp() ++
-              ["A=D",             # store newly decremented SP in A
-               "M=!M"] ++
-              increment_sp(), state}
+      op when op in [:neg, :not] ->
+        perform_operation_on_one_stack_operand(op, state)
 
       cmp when cmp in [:gt, :lt, :eq]  ->
         compare_args_with(cmp, state)
-
 
       op -> Process.exit(self(), "Operation #{op} not defined.")
     end
@@ -114,6 +79,40 @@ defmodule JackCompiler.CodeWriter do
       Path.dirname(file_path),
       Path.basename(file_path, ".vm") <> ".asm"
     ])
+  end
+
+  def perform_operation_on_one_stack_operand(op, state) do
+    opstr =
+      case op do
+        :neg -> "-"
+        :not -> "!"
+      end
+    commands =
+       decrement_sp() ++
+       ["A=D",             # store newly decremented SP in A
+        "M=#{opstr}M"] ++
+       increment_sp()
+
+    {commands, state}
+  end
+
+  def perform_operation_on_two_stack_operands(op, state) do
+    opstr =
+      case op do
+        :sub -> "-"
+        :add -> "+"
+        :and -> "&"
+        :or -> "|"
+      end
+    commands =
+     decrement_sp() ++
+     move_from_ref("SP", "R13") ++  # store arg2 in R13
+     pop_to_d_from_stack() ++       # load arg1 into D
+     ["A=M[R13]",                   # load arg2 into A (from R13)
+      "D=D#{opstr}A"] ++            # sub arg1 and arg2 into D
+     push_d_to_stack()
+
+    {commands, state}
   end
 
   def compare_args_with(cmp, state = %{file_name: fname, static_count: static}) do
