@@ -16,7 +16,7 @@ defmodule StatelessJackCompiler do
   def tokenise(command) do
     case command_type(command) do
       :arithmetic ->
-        {:arithmetic, command}
+        {:arithmetic, arg1(:arithmetic, command)}
       type when is_atom(type) ->
         {type, arg1(type, command), arg2(type, command)}
       other -> Process.exit(self(), "Haven't generated #{other} yet.")
@@ -50,7 +50,7 @@ defmodule StatelessJackCompiler do
       :return ->
         Process.exit(self(), "Cannot call arg from a return type")
       :arithmetic ->
-        command
+        command |> String.to_atom()
       _ ->
         String.split(command)
         |> Enum.at(1)

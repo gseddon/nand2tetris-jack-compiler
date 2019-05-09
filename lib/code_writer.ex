@@ -18,7 +18,11 @@ defmodule JackCompiler.CodeWriter do
   # Server Callbacks
   @impl true
   def init(:ok) do
-    {:ok, %{output_file: nil}}
+    {:ok, %{
+      output_file: nil,
+      file_name: nil,
+      static_count: 0
+    }}
   end
 
   @impl true
@@ -27,39 +31,83 @@ defmodule JackCompiler.CodeWriter do
      file_path
      |> generate_output_filename()
      |> File.open([:write, :utf8])
-    {:reply, :ok, %{state | output_file: file}}
+
+     file_name = Path.basename(file_path, ".vm")
+    {:reply, :ok, %{state |
+      output_file: file,
+      file_name: file_name
+    }}
   end
 
   @impl true
-  def handle_call({:arithmetic, operation}, _from, state) do
+  def handle_call({:arithmetic, operation},
+        _from,
+        state ) do
+
     case operation do
-      "add" -> decrement_sp() ++
+      :add ->  {decrement_sp() ++
                move_from_ref("SP", "R13") ++  # store arg2 in R13
-               decrement_sp() ++
-               load_to_d_from_ref("SP") ++    # load arg1 into D
-            [  "@R13",
-               "A=M",                         # load arg2 into A (from R13)
+               pop_to_d_from_stack() ++       # load arg1 into D
+              ["A=M[R13]",                    # load arg2 into A (from R13)
                "D=A+D"] ++                    # add arg1 and arg2 into D
-              store_d_to_ref("SP") ++         # store result at SP location
-              increment_sp()
+               push_d_to_stack(), state}
+
+      :sub -> {decrement_sp() ++
+              move_from_ref("SP", "R13") ++  # store arg2 in R13
+              pop_to_d_from_stack() ++       # load arg1 into D
+              ["A=M[R13]",                   # load arg2 into A (from R13)
+               "D=A-D"] ++                   # sub arg1 and arg2 into D
+              push_d_to_stack(), state}
+
+      :or ->  {decrement_sp() ++
+              move_from_ref("SP", "R13") ++  # store arg2 in R13
+              pop_to_d_from_stack() ++       # load arg1 into D
+              ["A=M[R13]",                   # load arg2 into A (from R13)
+                "D=A|D"] ++                  # or arg1 and arg2 into D
+              push_d_to_stack(), state}
+
+      :and -> {decrement_sp() ++
+              move_from_ref("SP", "R13") ++  # store arg2 in R13
+              pop_to_d_from_stack() ++       # load arg1 into D
+              ["A=M[R13]",                   # load arg2 into A (from R13)
+                "D=A&D"] ++                  # and arg1 and arg2 into D
+              push_d_to_stack(), state}
+
+      :neg -> {decrement_sp() ++
+              ["A=D",             # store newly decremented SP in A
+               "M=-M"] ++
+              increment_sp(), state}
+
+      :not ->{decrement_sp() ++
+              ["A=D",             # store newly decremented SP in A
+               "M=!M"] ++
+              increment_sp(), state}
+
+      cmp when cmp in [:gt, :lt, :eq]  ->
+        compare_args_with(cmp, state)
+
 
       op -> Process.exit(self(), "Operation #{op} not defined.")
     end
-    |> write_commands(state)
+    |> write_commands()
   end
+
+  #eq
+  #gt
+  #lt
 
   @impl true
   def handle_call({:push, segment, index}, _from, state) do
     case segment do
-      :constant -> load_constant_to_ref(index, "SP") ++ # load constant to where SP points
-                   increment_sp()
+      :constant -> {load_constant_to_ref(index, "SP") ++ # load constant to where SP points
+                   increment_sp(), state}
 
       seg -> Process.exit(self(), "Segment #{seg} not defined.")
     end
-    |> write_commands(state)
+    |> write_commands()
   end
 
-  def write_commands(commands, state = %{output_file: file}) do
+  def write_commands({commands, state = %{output_file: file}}) do
     commands
     |> Enum.each(fn command -> IO.write(file, command <> "\n") end)
     {:reply, :ok, state}
@@ -71,6 +119,50 @@ defmodule JackCompiler.CodeWriter do
       Path.basename(file_path, ".vm") <> ".asm"
     ])
   end
+
+  def compare_args_with(cmp, state = %{file_name: fname, static_count: static}) do
+    # Because we will probably have a bunch of these, salt the symbol name with
+    # a random value every time
+    salt = "#{fname}#{static}"
+
+
+    # if our stack is like x | y | SP
+    # gt is true if x > y
+    # a.k.a. arg2 < arg1
+    cmpstr =
+      cmp
+      |> Atom.to_string()
+      |> String.upcase()
+
+    commands =
+     decrement_sp() ++
+     move_from_ref("SP", "R13") ++  # store arg2 in R13
+     pop_to_d_from_stack() ++       # load arg1 into D
+     ["""
+     A=M[R13] // load arg2 into A (from R13)
+     D=D-A    // arg1 - arg2. If positive, arg1 > arg2. jump to true.
+     @TRUE#{salt}
+     D;J#{cmpstr}
+     A=M[SP]
+     M=0      // false
+     @END#{salt}
+     0;JMP
+     (TRUE#{salt})
+     A=M[SP]
+     M=-1     // true
+     (END#{salt})
+     """
+     ] ++
+     increment_sp()
+
+    {commands, %{state | static_count: static + 1}}
+  end
+
+  def pop_to_d_from_stack(), do:  decrement_sp() ++
+                                   load_to_d_from_ref("SP")
+
+  def push_d_to_stack(), do: store_d_to_ref("SP") ++
+                             increment_sp()
 
   def load_constant_to_ref(from, to), do: ["@#{from}", "D=A","A=M[#{to}]", "M=D"]
 
