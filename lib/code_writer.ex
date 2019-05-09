@@ -56,21 +56,21 @@ defmodule JackCompiler.CodeWriter do
               move_from_ref("SP", "R13") ++  # store arg2 in R13
               pop_to_d_from_stack() ++       # load arg1 into D
               ["A=M[R13]",                   # load arg2 into A (from R13)
-               "D=A-D"] ++                   # sub arg1 and arg2 into D
+               "D=D-A"] ++                   # sub arg1 and arg2 into D
               push_d_to_stack(), state}
 
       :or ->  {decrement_sp() ++
               move_from_ref("SP", "R13") ++  # store arg2 in R13
               pop_to_d_from_stack() ++       # load arg1 into D
               ["A=M[R13]",                   # load arg2 into A (from R13)
-                "D=A|D"] ++                  # or arg1 and arg2 into D
+               "D=A|D"] ++                   # or arg1 and arg2 into D
               push_d_to_stack(), state}
 
       :and -> {decrement_sp() ++
               move_from_ref("SP", "R13") ++  # store arg2 in R13
               pop_to_d_from_stack() ++       # load arg1 into D
               ["A=M[R13]",                   # load arg2 into A (from R13)
-                "D=A&D"] ++                  # and arg1 and arg2 into D
+               "D=A&D"] ++                   # and arg1 and arg2 into D
               push_d_to_stack(), state}
 
       :neg -> {decrement_sp() ++
@@ -91,10 +91,6 @@ defmodule JackCompiler.CodeWriter do
     end
     |> write_commands()
   end
-
-  #eq
-  #gt
-  #lt
 
   @impl true
   def handle_call({:push, segment, index}, _from, state) do
