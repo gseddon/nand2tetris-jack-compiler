@@ -21,7 +21,7 @@ defmodule JackCompiler.CodeWriter do
     {:ok, %{
       output_file: nil,
       file_name: nil,
-      static_count: 0
+      symbol_count: 0
     }}
   end
 
@@ -44,21 +44,21 @@ defmodule JackCompiler.CodeWriter do
 
     case operation do
       op when op in [:add, :sub, :or, :and] ->
-        perform_operation_on_two_stack_operands(op, state)
+        perform_operation_on_two_stack_operands(op)
 
       op when op in [:neg, :not] ->
-        perform_operation_on_one_stack_operand(op, state)
+        perform_operation_on_one_stack_operand(op)
 
       cmp when cmp in [:gt, :lt, :eq]  ->
         compare_args_with(cmp, state)
 
       op -> Process.exit(self(), "Operation #{op} not defined.")
     end
-    |> write_commands()
+    |> write_commands(state)
   end
 
   @impl true
-  def handle_call({:push, segment, index}, _from, state) do
+  def handle_call({:push, segment, index}, _from, state = %{file_name: fname}) do
     case segment do
       :constant ->
         load_constant_to_ref(index, "SP") ++ # load constant to where SP points
@@ -88,12 +88,16 @@ defmodule JackCompiler.CodeWriter do
         ["D=M[#{which}]"] ++
         push_d_to_stack()
 
+      :static ->
+      ["D=M[#{fname}.#{index}]"] ++
+      push_d_to_stack()
+
     end
     |> write_commands(state)
   end
 
   @impl true
-  def handle_call({:pop, segment, index}, _from, state) do
+  def handle_call({:pop, segment, index}, _from, state = %{file_name: fname}) do
     case segment do
       segment when segment in [:local, :argument, :this, :that] ->
         ref =
@@ -119,10 +123,17 @@ defmodule JackCompiler.CodeWriter do
         pop_to_d_from_stack() ++
         ["M[#{which}]=D"]
 
+      :static ->
+       pop_to_d_from_stack() ++
+       ["M[#{fname}.#{index}]=D"]
+
     end
     |> write_commands(state)
   end
 
+  # This is so I can be lazy with my piping into this. Hush you.
+  # The commands will be written!
+  def write_commands({_commands, _state} = r, __state), do: write_commands(r)
   def write_commands(commands, state), do: write_commands({commands, state})
 
   def write_commands({commands, state = %{output_file: file}}) do
@@ -138,22 +149,20 @@ defmodule JackCompiler.CodeWriter do
     ])
   end
 
-  def perform_operation_on_one_stack_operand(op, state) do
+  def perform_operation_on_one_stack_operand(op) do
     opstr =
       case op do
         :neg -> "-"
         :not -> "!"
       end
-    commands =
-       decrement_sp() ++
-       ["A=D",             # store newly decremented SP in A
-        "M=#{opstr}M"] ++
-       increment_sp()
 
-    {commands, state}
+     decrement_sp() ++
+     ["A=D",             # store newly decremented SP in A
+      "M=#{opstr}M"] ++
+     increment_sp()
   end
 
-  def perform_operation_on_two_stack_operands(op, state) do
+  def perform_operation_on_two_stack_operands(op) do
     opstr =
       case op do
         :sub -> "-"
@@ -161,21 +170,19 @@ defmodule JackCompiler.CodeWriter do
         :and -> "&"
         :or -> "|"
       end
-    commands =
-     decrement_sp() ++
-     move_from_ref("SP", "R13") ++  # store arg2 in R13
-     pop_to_d_from_stack() ++       # load arg1 into D
-     ["A=M[R13]",                   # load arg2 into A (from R13)
-      "D=D#{opstr}A"] ++            # sub arg1 and arg2 into D
-     push_d_to_stack()
 
-    {commands, state}
+   decrement_sp() ++
+   move_from_ref("SP", "R13") ++  # store arg2 in R13
+   pop_to_d_from_stack() ++       # load arg1 into D
+   ["A=M[R13]",                   # load arg2 into A (from R13)
+    "D=D#{opstr}A"] ++            # sub arg1 and arg2 into D
+   push_d_to_stack()
   end
 
-  def compare_args_with(cmp, state = %{file_name: fname, static_count: static}) do
+  def compare_args_with(cmp, state = %{file_name: fname, symbol_count: count}) do
     # Because we will probably have a bunch of these, salt the symbol name with
     # a random value every time
-    salt = "#{fname}#{static}"
+    salt = "#{fname}#{count}"
 
     # if our stack is like x | y | SP
     # gt is true if x > y
@@ -206,7 +213,7 @@ defmodule JackCompiler.CodeWriter do
      ] ++
      increment_sp()
 
-    {commands, %{state | static_count: static + 1}}
+    {commands, %{state | symbol_count: count + 1}}
   end
 
   def pop_to_d_from_stack(), do:  decrement_sp() ++
