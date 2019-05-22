@@ -22,10 +22,10 @@ defmodule StatelessJackCompiler do
         {type, arg1label(command)}
 
       type when type in [:function, :call] ->
-        {type, arg1label(command), arg2(command)}
+        {type, {arg1label(command), arg2(command)}}
 
       type when type in [:push, :pop]->
-        {type, arg1(command), arg2(command)}
+        {type, {arg1(command), arg2(command)}}
 
       :return ->
         {:return}

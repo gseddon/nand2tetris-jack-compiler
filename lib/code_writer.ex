@@ -60,7 +60,7 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:call, function, nargs}, _,
+  def handle_call({:call, {function, nargs}}, _,
         state = %{file_name: fname, func: func, symbol_count: count}) do
 
     return_address = "#{fname}.called_by_#{func}.#{count}.return"
@@ -88,8 +88,26 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:function, function, nlocals}, _, state) do
-
+  def handle_call({:function, {function, nlocals}}, _, state) do
+    reply =
+      [
+        label: function,
+        raw_commands:
+          ["@#{nlocals}",
+            "D=A"] ++
+          store_d_to_ref("R13"),
+        label: "start_loop",
+        raw_commands: [
+          "@#{label_gen(function, "end_of_loop")}",
+          "D;JEQ"],
+        push: {:constant, 0},
+        raw_commands: [
+          load_to_d_from_ref("R13"),
+          "D=D-1",
+          store_d_to_ref("R13")],
+        goto: "start_loop",
+        label: "end_of_loop"
+      ]
 
     {:reply, reply, %{state | func: function}}
   end
@@ -101,26 +119,39 @@ defmodule JackCompiler.CodeWriter do
     {:reply, reply, %{state | func: nil}}
   end
 
+  def label_gen(function, label), do: "#{function}$#{label}"
+
   @impl true
   def handle_call({:label, label}, _, state = %{func: func}) do
-    ["(#{func}$#{label})"] |> write_commands(state)
+    ["(#{label_gen(func, label)})"] |> write_commands(state)
   end
 
   @impl true
   def handle_call({:goto, label}, _, state = %{func: func}) do
     ["""
-    @#{func}$#{label}
+    @#{label_gen(func, label)}
     0;JMP
     """]
     |> write_commands(state)
   end
 
   @impl true
-  def handle_call({:if_goto, label}, _, state) do
+  def handle_call({:if_goto, label}, _, state = %{func: func}) do
+    pop_to_d_from_stack() ++
     ["""
-     @#{label}
-     0;JLT
+    @#{label_gen(func, label)}
+     D;JNE
      """] # remember -1 is "true" in Hack
+    |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:if_false_goto, label}, _, state = %{func: func}) do
+    pop_to_d_from_stack() ++
+    ["""
+    @#{func}$#{label}
+    D;JEQ
+    """] # this isn't part of the instruction set but I want it
     |> write_commands(state)
   end
 
@@ -148,7 +179,7 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:push, segment, index}, _from, state = %{file_name: fname}) do
+  def handle_call({:push, {segment, index}}, _from, state = %{file_name: fname}) do
     case segment do
       :constant ->
         load_constant_to_ref(index, "SP") ++ # load constant to where SP points
@@ -188,7 +219,7 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:pop, segment, index}, _from, state = %{file_name: fname}) do
+  def handle_call({:pop, {segment, index}}, _from, state = %{file_name: fname}) do
     case segment do
       segment when segment in [:local, :argument, :this, :that] ->
         ref =
