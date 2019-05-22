@@ -12,9 +12,10 @@ defmodule JackCompiler.CodeWriter do
 
   def bootstrap() do
     [
-      {:bootstrap},
-      {:call, "Sys.init", 0}
-    ] |> Enum.each(&write_command/1)
+      bootstrap: :please,
+      call: {"Sys.init", 0}
+    ]
+    |> Enum.each(&write_command/1)
   end
 
   def write_command(command_tuple) do
@@ -53,7 +54,7 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:bootstrap}, _, state) do
+  def handle_call({:bootstrap, _}, _, state) do
     load_constant_to_location(256, "SP")
     |> write_commands(state)
   end
@@ -116,6 +117,8 @@ defmodule JackCompiler.CodeWriter do
     {:reply, reply, %{state | func: nil}}
   end
 
+  def label_gen(nil, label), do: "#{label}"
+  def label_gen(function, function), do: "#{function}"
   def label_gen(function, label), do: "#{function}$#{label}"
 
   @impl true
