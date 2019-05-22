@@ -6,20 +6,29 @@ defmodule StatelessJackCompiler do
     CodeWriter.set_file_name(path)
     {file_name, commands} = load_file(path)
     IO.puts("Loaded #{file_name}")
-    dump_lines(commands)
-
+#    dump_lines(commands)
+    CodeWriter.bootstrap()
     commands
     |> Enum.map(&tokenise/1)
-    |> Enum.map(&CodeWriter.write_command/1)
+    |> Enum.each(&CodeWriter.write_command/1)
   end
 
   def tokenise(command) do
     case command_type(command) do
       :arithmetic ->
-        {:arithmetic, arg1(:arithmetic, command)}
-      type when is_atom(type) ->
-        {type, arg1(type, command), arg2(type, command)}
-      other -> Process.exit(self(), "Haven't generated #{other} yet.")
+        {:arithmetic, command |> String.to_atom()}
+
+      type when type in [:label, :goto, :if_goto] ->
+        {type, arg1label(command)}
+
+      type when type in [:function, :call] ->
+        {type, arg1label(command), arg2(command)}
+
+      type when type in [:push, :pop]->
+        {type, arg1(command), arg2(command)}
+
+      :return ->
+        {:return}
     end
   end
 
@@ -39,32 +48,33 @@ defmodule StatelessJackCompiler do
 
   def command_type(command) do
     case command do
-      "push" <> _ -> :push
-      "pop" <> _  -> :pop
-      _           -> :arithmetic
+      "push" <> _   -> :push
+      "pop" <> _    -> :pop
+      "label" <> _  -> :label
+      "call" <> _   -> :call
+      "return" <> _ -> :return
+      "function"<>_ -> :function
+      "goto" <> _   -> :goto
+      "if-goto" <>_ -> :if_goto
+      _             -> :arithmetic
     end
   end
 
-  def arg1(type, command) do
-    case type do
-      :return ->
-        Process.exit(self(), "Cannot call arg from a return type")
-      :arithmetic ->
-        command |> String.to_atom()
-      _ ->
-        String.split(command)
-        |> Enum.at(1)
-        |> String.to_atom()
-    end
+  def arg1label(command) do
+    String.split(command)
+    |> Enum.at(1)
   end
 
-  def arg2(type, command) do
-    case type do
-      _ ->
-        String.split(command)
-        |> Enum.at(2)
-        |> String.to_integer()
-    end
+  def arg1(command) do
+    String.split(command)
+    |> Enum.at(1)
+    |> String.to_atom()
+  end
+
+  def arg2(command) do
+    String.split(command)
+    |> Enum.at(2)
+    |> String.to_integer()
   end
 
   defp clean_line(line) do

@@ -6,13 +6,25 @@ defmodule JackCompiler.CodeWriter do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
-
   def set_file_name(file_path) do
     GenServer.call(__MODULE__, {:set_file_name, file_path})
   end
 
+  def bootstrap() do
+    [
+      {:bootstrap},
+      {:call, "Sys.init", 0}
+    ] |> Enum.each(&write_command/1)
+  end
+
   def write_command(command_tuple) do
-    GenServer.call(__MODULE__, command_tuple)
+    case GenServer.call(__MODULE__, command_tuple) do
+      :ok ->
+        :ok
+      more_commands ->
+        more_commands
+        |> Enum.each(&write_command/1)
+    end
   end
 
   # Server Callbacks
@@ -21,6 +33,7 @@ defmodule JackCompiler.CodeWriter do
     {:ok, %{
       output_file: nil,
       file_name: nil,
+      func: nil,
       symbol_count: 0
     }}
   end
@@ -40,6 +53,78 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
+  def handle_call({:bootstrap}, _, state) do
+    [
+      "M[SP]=256"
+    ] |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:call, function, nargs}, _,
+        state = %{file_name: fname, func: func, symbol_count: count}) do
+
+    return_address = "#{fname}.called_by_#{func}.#{count}.return"
+    reply = [
+      push: return_address,
+      push: "LCL",
+      push: "ARG",
+      push: "THIS",
+      push: "THAT",
+      raw_commands: ["""
+       @#{nargs}
+       D=A
+       @SP
+       D=A-D
+       @5
+       D=D-A
+       M[ARG]=D // ARG = SP-n-5
+       D=M[SP]
+       M[LCL]=D // LCL = SP
+      """],
+      goto: function,
+      label: return_address
+    ]
+    {:reply, reply, %{state | symbol_count: count + 1}}
+  end
+
+  @impl true
+  def handle_call({:function, function, nlocals}, _, state) do
+
+
+    {:reply, reply, %{state | func: function}}
+  end
+
+  @impl true
+  def handle_call({:return}, _, state) do
+
+
+    {:reply, reply, %{state | func: nil}}
+  end
+
+  @impl true
+  def handle_call({:label, label}, _, state = %{func: func}) do
+    ["(#{func}$#{label})"] |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:goto, label}, _, state = %{func: func}) do
+    ["""
+    @#{func}$#{label}
+    0;JMP
+    """]
+    |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:if_goto, label}, _, state) do
+    ["""
+     @#{label}
+     0;JLT
+     """] # remember -1 is "true" in Hack
+    |> write_commands(state)
+  end
+
+  @impl true
   def handle_call({:arithmetic, operation}, _from, state) do
 
     case operation do
@@ -51,9 +136,14 @@ defmodule JackCompiler.CodeWriter do
 
       cmp when cmp in [:gt, :lt, :eq]  ->
         compare_args_with(cmp, state)
-
-      op -> Process.exit(self(), "Operation #{op} not defined.")
     end
+    |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:push, symbol}, _, state) do
+    ["D=M[#{symbol}]"] ++
+    push_d_to_stack()
     |> write_commands(state)
   end
 
@@ -72,6 +162,7 @@ defmodule JackCompiler.CodeWriter do
             :this -> "THIS"
             :that -> "THAT"
           end
+
         load_to_d_from_ref_with_offset(ref, index) ++
         push_d_to_stack()
 
@@ -107,6 +198,7 @@ defmodule JackCompiler.CodeWriter do
             :this -> "THIS"
             :that -> "THAT"
           end
+
         pop_to_d_from_stack() ++
         store_d_to_ref_with_offset(ref, index)
 
@@ -131,6 +223,11 @@ defmodule JackCompiler.CodeWriter do
     |> write_commands(state)
   end
 
+  @impl true
+  def handle_call({:raw_commands, commands}, _, state) do
+    commands
+    |> write_commands(state)
+  end
   # This is so I can be lazy with my piping into this. Hush you.
   # The commands will be written!
   def write_commands({_commands, _state} = r, __state), do: write_commands(r)
