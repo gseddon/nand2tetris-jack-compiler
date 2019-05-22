@@ -54,9 +54,8 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:bootstrap}, _, state) do
-    [
-      "M[SP]=256"
-    ] |> write_commands(state)
+    load_constant_to_location(256, "SP")
+    |> write_commands(state)
   end
 
   @impl true
@@ -93,18 +92,16 @@ defmodule JackCompiler.CodeWriter do
       [
         label: function,
         raw_commands:
-          ["@#{nlocals}",
-            "D=A"] ++
-          store_d_to_ref("R13"),
+          load_constant_to_location(nlocals, "R13"),
         label: "start_loop",
         raw_commands: [
           "@#{label_gen(function, "end_of_loop")}",
           "D;JEQ"],
         push: {:constant, 0},
         raw_commands: [
-          load_to_d_from_ref("R13"),
+          "D=M[R13]",
           "D=D-1",
-          store_d_to_ref("R13")],
+          "M[R13]=D"],
         goto: "start_loop",
         label: "end_of_loop"
       ]
@@ -351,6 +348,8 @@ defmodule JackCompiler.CodeWriter do
                              increment_sp()
 
   def load_constant_to_ref(from, to), do: ["@#{from}", "D=A","A=M[#{to}]", "M=D"]
+
+  def load_constant_to_location(from, to), do: ["@#{from}", "D=A", "M[#{to}]=D"]
 
   def move_from_ref(from, to), do: ["A=M[#{from}]", "D=M", "@#{to}", "M=D"]
 
