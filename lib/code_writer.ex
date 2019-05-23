@@ -114,31 +114,31 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:return}, _, state) do
-    reply =
-    load_to_d_from_location("LCL") ++
-    store_d_to_location("R13") ++ # FRAME = LCL
+    reply = [raw_commands:
+      load_to_d_from_location("LCL") ++
+      store_d_to_location("R13") ++ # FRAME = LCL
 
-    load_to_d_from_ref_with_offset("R13", -5) ++
-    store_d_to_location("R14") ++ # RET = *(FRAME-5)
+      load_to_d_from_ref_with_offset("R13", -5) ++
+      store_d_to_location("R14") ++ # RET = *(FRAME-5)
 
-    pop_to_d_from_stack() ++
-    store_d_to_ref("ARG") ++ # *ARG = pop()
+      pop_to_d_from_stack() ++
+      store_d_to_ref("ARG") ++ # *ARG = pop()
 
-    load_to_d_from_location("ARG") ++
-    ["D=D+1"] ++
-    store_d_to_location("SP") ++ # SP = ARG+1
+      load_to_d_from_location("ARG") ++
+      ["D=D+1"] ++
+      store_d_to_location("SP") ++ # SP = ARG+1
 
-    load_to_d_from_ref_with_offset("R13", -1) ++
-    store_d_to_location("THAT") ++ # THAT = *(FRAME-1)
-    load_to_d_from_ref_with_offset("R13", -2) ++
-    store_d_to_location("THIS") ++ # THIS = *(FRAME-2)
-    load_to_d_from_ref_with_offset("R13", -3) ++
-    store_d_to_location("ARG") ++ # ARG = *(FRAME-3)
-    load_to_d_from_ref_with_offset("R13", -4) ++
-    store_d_to_location("LCL") ++ # LCL = *(FRAME-4)
+      load_to_d_from_ref_with_offset("R13", -1) ++
+      store_d_to_location("THAT") ++ # THAT = *(FRAME-1)
+      load_to_d_from_ref_with_offset("R13", -2) ++
+      store_d_to_location("THIS") ++ # THIS = *(FRAME-2)
+      load_to_d_from_ref_with_offset("R13", -3) ++
+      store_d_to_location("ARG") ++ # ARG = *(FRAME-3)
+      load_to_d_from_ref_with_offset("R13", -4) ++
+      store_d_to_location("LCL") ++ # LCL = *(FRAME-4)
 
-    ["A=M[R14]", "0;JMP"] # goto RET
-
+      ["A=M[R14]", "0;JMP"] # goto RET
+    ]
     {:reply, reply, %{state | func: nil}}
   end
 
