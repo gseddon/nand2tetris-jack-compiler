@@ -2,12 +2,23 @@ defmodule StatelessJackCompiler do
   alias JackCompiler.CodeWriter
   require Logger
 
+  def init(path) do
+    if is_vm_dir?(path) do
+      CodeWriter.open_folder(path)
+      CodeWriter.bootstrap()
+
+      Path.wildcard(path <> "/*.vm")
+      |> Enum.each(&compile_file/1)
+    else
+      CodeWriter.open_file(path)
+      compile_file(path)
+    end
+  end
   def compile_file(path) do
     CodeWriter.set_file_name(path)
     {file_name, commands} = load_file(path)
     IO.puts("Loaded #{file_name}")
-#    dump_lines(commands)
-#    CodeWriter.bootstrap()
+
     commands
     |> Enum.map(&tokenise/1)
     |> Enum.each(&CodeWriter.write_command/1)

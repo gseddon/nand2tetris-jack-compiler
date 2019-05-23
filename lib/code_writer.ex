@@ -10,6 +10,14 @@ defmodule JackCompiler.CodeWriter do
     GenServer.call(__MODULE__, {:set_file_name, file_path})
   end
 
+  def open_file(file_path) do
+    GenServer.call(__MODULE__, {:initialise_file, {:file, file_path}})
+  end
+
+  def open_folder(folder_path) do
+    GenServer.call(__MODULE__, {:initialise_file, {:folder, folder_path}})
+  end
+
   def bootstrap() do
     [
       bootstrap: :please,
@@ -40,17 +48,18 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:set_file_name, file_path}, _from, state) do
+  def handle_call({:initialise_file, file_path}, _, state) do
     {:ok, file} =
-     file_path
-     |> generate_output_filename()
-     |> File.open([:write, :utf8])
+      file_path
+      |> generate_output_filename()
+      |> File.open([:write, :utf8])
+    {:reply, :ok, %{state | output_file: file}}
+  end
 
-     file_name = Path.basename(file_path, ".vm")
-    {:reply, :ok, %{state |
-      output_file: file,
-      file_name: file_name
-    }}
+  @impl true
+  def handle_call({:set_file_name, file_path}, _from, state) do
+    file_name = Path.basename(file_path, ".vm")
+    {:reply, :ok, %{state | file_name: file_name}}
   end
 
   @impl true
@@ -297,11 +306,19 @@ defmodule JackCompiler.CodeWriter do
   def label_gen(function, function), do: "#{function}"
   def label_gen(function, label), do: "#{function}$#{label}"
 
-  def generate_output_filename(file_path) do
-    Path.join([
-      Path.dirname(file_path),
-      Path.basename(file_path, ".vm") <> ".asm"
-    ])
+  def generate_output_filename({type, path}) do
+    case type do
+      :folder ->
+        Path.join([
+          path,
+          Path.basename(path) <> ".asm"
+        ])
+      :file ->
+        Path.join([
+          Path.dirname(path),
+          Path.basename(path, ".vm") <> ".asm"
+        ])
+    end
   end
 
   def perform_operation_on_one_stack_operand(op) do
