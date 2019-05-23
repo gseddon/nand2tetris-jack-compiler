@@ -113,13 +113,10 @@ defmodule JackCompiler.CodeWriter do
   @impl true
   def handle_call({:return}, _, state) do
 
-
+    reply = []
     {:reply, reply, %{state | func: nil}}
   end
 
-  def label_gen(nil, label), do: "#{label}"
-  def label_gen(function, function), do: "#{function}"
-  def label_gen(function, label), do: "#{function}$#{label}"
 
   @impl true
   def handle_call({:label, label}, _, state = %{func: func}) do
@@ -139,7 +136,7 @@ defmodule JackCompiler.CodeWriter do
   def handle_call({:if_goto, label}, _, state = %{func: func}) do
     pop_to_d_from_stack() ++
     ["""
-    @#{label_gen(func, label)}
+     @#{label_gen(func, label)}
      D;JNE
      """] # remember -1 is "true" in Hack
     |> write_commands(state)
@@ -171,12 +168,6 @@ defmodule JackCompiler.CodeWriter do
     |> write_commands(state)
   end
 
-  @impl true
-  def handle_call({:push, symbol}, _, state) do
-    ["D=M[#{symbol}]"] ++
-    push_d_to_stack()
-    |> write_commands(state)
-  end
 
   @impl true
   def handle_call({:push, {segment, index}}, _from, state = %{file_name: fname}) do
@@ -215,6 +206,13 @@ defmodule JackCompiler.CodeWriter do
       push_d_to_stack()
 
     end
+    |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:push, symbol}, _, state) do
+    ["D=M[#{symbol}]"] ++
+    push_d_to_stack()
     |> write_commands(state)
   end
 
@@ -269,6 +267,10 @@ defmodule JackCompiler.CodeWriter do
     |> Enum.each(fn command -> IO.write(file, command <> "\n") end)
     {:reply, :ok, state}
   end
+
+  def label_gen(nil, label), do: "#{label}"
+  def label_gen(function, function), do: "#{function}"
+  def label_gen(function, label), do: "#{function}$#{label}"
 
   def generate_output_filename(file_path) do
     Path.join([

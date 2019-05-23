@@ -7,7 +7,7 @@ defmodule StatelessJackCompiler do
     {file_name, commands} = load_file(path)
     IO.puts("Loaded #{file_name}")
 #    dump_lines(commands)
-    CodeWriter.bootstrap()
+#    CodeWriter.bootstrap()
     commands
     |> Enum.map(&tokenise/1)
     |> Enum.each(&CodeWriter.write_command/1)
