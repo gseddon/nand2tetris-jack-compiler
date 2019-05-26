@@ -42,7 +42,7 @@ defmodule JackCompiler.CodeWriter do
     {:ok, %{
       output_file: nil,
       file_name: nil,
-      func: nil,
+      func: "Bootstrap",
       symbol_count: 0
     }}
   end
@@ -65,20 +65,16 @@ defmodule JackCompiler.CodeWriter do
   @impl true
   def handle_call({:bootstrap, _}, _, state) do
     load_constant_to_location(256, "SP")
-#    load_constant_to_location(32767, "LCL") ++
-#    load_constant_to_location(32766, "ARG") ++
-#    load_constant_to_location(32765, "THIS") ++
-#    load_constant_to_location(32764, "THAT")
     |> write_commands(state)
   end
 
   @impl true
   def handle_call({:call, {function, nargs}}, _,
-        state = %{file_name: fname, func: func, symbol_count: count}) do
+        state = %{file_name: fname, symbol_count: count}) do
 
-    return_address = "#{fname}.caller.#{func}.#{count}.return"
+    return_address = "#{fname}__return_from:#{function}.#{count}"
     reply = [
-      comment: "Calling #{function} with #{nargs} args.",
+      comment: "Call #{function} with #{nargs} args.",
       raw_commands: [
         "@#{return_address}",
         "D=A"] ++
@@ -168,7 +164,7 @@ defmodule JackCompiler.CodeWriter do
 
       ["A=M[R14]", "0;JMP"] # goto RET
     ]
-    {:reply, reply, %{state | func: nil}}
+    {:reply, reply, state}
   end
 
 
@@ -208,7 +204,6 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:arithmetic, operation}, _from, state) do
-    ["// Performing arithmetic #{operation}"] ++
     case operation do
       op when op in [:add, :sub, :or, :and] ->
         perform_operation_on_two_stack_operands(op)
@@ -225,7 +220,7 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:push, {segment, index}}, _from, state = %{file_name: fname}) do
-    ["// Pushing #{segment} #{index}"] ++
+    ["// Push #{segment} #{index}"] ++
     case segment do
       :constant ->
         load_constant_to_ref(index, "SP") ++ # load constant to where SP points
@@ -266,7 +261,7 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:push, symbol}, _, state) do
-    ["// Pushing symbol #{symbol}"] ++
+    ["// Push symbol #{symbol}"] ++
 
     ["D=M[#{symbol}]"] ++
     push_d_to_stack()
@@ -275,7 +270,7 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:pop, {segment, index}}, _from, state = %{file_name: fname}) do
-    ["// Popping #{segment} #{index}"] ++
+    ["// Pop #{segment} #{index}"] ++
     case segment do
       segment when segment in [:local, :argument, :this, :that] ->
         ref =
@@ -352,7 +347,8 @@ defmodule JackCompiler.CodeWriter do
         :not -> "!"
       end
 
-     decrement_sp() ++
+    ["// Performing arithmetic #{op}"] ++
+    decrement_sp() ++
      ["A=D",             # store newly decremented SP in A
       "M=#{opstr}M"] ++
      increment_sp()
@@ -367,6 +363,7 @@ defmodule JackCompiler.CodeWriter do
         :or -> "|"
       end
 
+   ["// Performing arithmetic #{op}"] ++
    decrement_sp() ++
    move_from_ref("SP", "R13") ++  # store arg2 in R13
    pop_to_d_from_stack() ++       # load arg1 into D
@@ -389,6 +386,7 @@ defmodule JackCompiler.CodeWriter do
       |> String.upcase()
 
     commands =
+     ["// Performing arithmetic #{cmp}"] ++
      decrement_sp() ++
      move_from_ref("SP", "R13") ++  # store arg2 in R13
      pop_to_d_from_stack() ++       # load arg1 into D

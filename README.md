@@ -1,5 +1,8 @@
 # JackCompiler
 
+An implementation in Elixir of a compiler of the Jack language which targets the Jack virtual machine.
+This is a simplified version of the Java Virtual Machine.
+
 
 ASM symbols:
 
