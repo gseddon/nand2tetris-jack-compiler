@@ -20,7 +20,7 @@ defmodule JackCompiler.CodeWriter do
 
   def bootstrap() do
     [
-      bootstrap: :please,
+      bootstrap: :the_system,
       call: {"Sys.init", 0}
     ]
     |> Enum.each(&write_command/1)
@@ -65,8 +65,10 @@ defmodule JackCompiler.CodeWriter do
   @impl true
   def handle_call({:bootstrap, _}, _, state) do
     load_constant_to_location(256, "SP")
-#    load_constant_to_location(300, "LCL") ++
-#    load_constant_to_location(400, "ARG")
+#    load_constant_to_location(32767, "LCL") ++
+#    load_constant_to_location(32766, "ARG") ++
+#    load_constant_to_location(32765, "THIS") ++
+#    load_constant_to_location(32764, "THAT")
     |> write_commands(state)
   end
 
@@ -77,7 +79,10 @@ defmodule JackCompiler.CodeWriter do
     return_address = "#{fname}.caller.#{func}.#{count}.return"
     reply = [
       comment: "Calling #{function} with #{nargs} args.",
-      push: return_address,
+      raw_commands: [
+        "@#{return_address}",
+        "D=A"] ++
+         push_d_to_stack(),
       push: "LCL",
       push: "ARG",
       push: "THIS",
@@ -86,14 +91,15 @@ defmodule JackCompiler.CodeWriter do
        @#{nargs}
        D=A
        @SP
-       D=A-D
+       D=M-D
        @5
        D=D-A
        M[ARG]=D // ARG = SP-n-5
        D=M[SP]
        M[LCL]=D // LCL = SP
+       @#{function}
+       0;JMP    // unconditionally jmp to #{function}
       """],
-      goto: function,
       label: return_address
     ]
     {:reply, reply, %{state | symbol_count: count + 1}}
@@ -107,17 +113,17 @@ defmodule JackCompiler.CodeWriter do
         label: function,
         raw_commands:
           load_constant_to_location(nlocals, "R13"),
-        label: "start_loop",
+        label: "fn_defn_start_loop",
         raw_commands: [
-          "@#{label_gen(function, "end_of_loop")}",
+          "@#{label_gen(function, "fn_defn_end_of_loop")}",
           "D;JEQ"],
         push: {:constant, 0},
         raw_commands: [
           "D=M[R13]",
           "D=D-1",
           "M[R13]=D"],
-        goto: "start_loop",
-        label: "end_of_loop"
+        goto: "fn_defn_start_loop",
+        label: "fn_defn_end_of_loop"
       ]
 
     {:reply, reply, %{state | func: function}}
