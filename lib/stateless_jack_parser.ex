@@ -14,6 +14,7 @@ defmodule StatelessJackCompiler do
       compile_file(path)
     end
   end
+
   def compile_file(path) do
     CodeWriter.set_file_name(path)
     {file_name, commands} = load_file(path)
@@ -38,6 +39,8 @@ defmodule StatelessJackCompiler do
       type when type in [:push, :pop]->
         {type, {arg1(command), arg2(command)}}
 
+      :comment -> {:comment, command}
+
       :return ->
         {:return}
     end
@@ -47,7 +50,7 @@ defmodule StatelessJackCompiler do
     {:ok, file} = File.open(path, [:read, :utf8] )
     file_name = extract_vm_filename(path)
 
-    lines = Enum.flat_map(IO.stream(file, :line), &clean_line/1)
+    lines = Enum.flat_map(IO.stream(file, :line), &clean_line_comments/1)
     {file_name, lines}
   end
 
@@ -67,6 +70,7 @@ defmodule StatelessJackCompiler do
       "function"<>_ -> :function
       "goto" <> _   -> :goto
       "if-goto" <>_ -> :if_goto
+      "//" <> _     -> :comment
       _             -> :arithmetic
     end
   end
@@ -88,15 +92,30 @@ defmodule StatelessJackCompiler do
     |> String.to_integer()
   end
 
-  defp clean_line(line) do
-    line
+#  defp clean_line(line) do
+#    line
+#    |> String.split("//")
+#    |> hd()
+#    |> String.trim()
+#    |> (fn
+#          "" -> []
+#          command -> [command]
+#        end).()
+#  end
+
+  defp clean_line_comments(line) do
+    [code | comment] = line
     |> String.split("//")
-    |> hd()
+
+    comment = with [com | _] <- comment, do: ["//" <> com |> String.trim()]
+
+    comment ++
+    (code
     |> String.trim()
     |> (fn
           "" -> []
           command -> [command]
-        end).()
+        end).())
   end
 
   defp is_vm_dir?(file_path) do

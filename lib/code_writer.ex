@@ -64,9 +64,9 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:bootstrap, _}, _, state) do
-    load_constant_to_location(256, "SP") ++
-    load_constant_to_location(300, "LCL") ++
-    load_constant_to_location(400, "ARG")
+    load_constant_to_location(256, "SP")
+#    load_constant_to_location(300, "LCL") ++
+#    load_constant_to_location(400, "ARG")
     |> write_commands(state)
   end
 
@@ -74,8 +74,9 @@ defmodule JackCompiler.CodeWriter do
   def handle_call({:call, {function, nargs}}, _,
         state = %{file_name: fname, func: func, symbol_count: count}) do
 
-    return_address = "#{fname}.called_by_#{func}.#{count}.return"
+    return_address = "#{fname}.caller.#{func}.#{count}.return"
     reply = [
+      comment: "Calling #{function} with #{nargs} args.",
       push: return_address,
       push: "LCL",
       push: "ARG",
@@ -102,6 +103,7 @@ defmodule JackCompiler.CodeWriter do
   def handle_call({:function, {function, nlocals}}, _, state) do
     reply =
       [
+        comment: "function #{function} definition.",
         label: function,
         raw_commands:
           load_constant_to_location(nlocals, "R13"),
@@ -122,8 +124,20 @@ defmodule JackCompiler.CodeWriter do
   end
 
   @impl true
-  def handle_call({:return}, _, state) do
-    reply = [raw_commands:
+  def handle_call({:comment, comment}, _, state) do
+    comment = if String.starts_with?(comment, "//") do
+      comment
+    else
+      "// " <> comment
+    end
+    ["#{comment}"] |> write_commands(state)
+  end
+
+  @impl true
+  def handle_call({:return}, _, state = %{func: func}) do
+    reply = [
+      comment: "Return from #{func}",
+      raw_commands:
       load_to_d_from_location("LCL") ++
       store_d_to_location("R13") ++ # FRAME = LCL
 
@@ -205,6 +219,7 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:push, {segment, index}}, _from, state = %{file_name: fname}) do
+    ["// Pushing #{segment} #{index}"] ++
     case segment do
       :constant ->
         load_constant_to_ref(index, "SP") ++ # load constant to where SP points
@@ -245,6 +260,8 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:push, symbol}, _, state) do
+    ["// Pushing symbol #{symbol}"] ++
+
     ["D=M[#{symbol}]"] ++
     push_d_to_stack()
     |> write_commands(state)
@@ -252,6 +269,7 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:pop, {segment, index}}, _from, state = %{file_name: fname}) do
+    ["// Popping #{segment} #{index}"] ++
     case segment do
       segment when segment in [:local, :argument, :this, :that] ->
         ref =
