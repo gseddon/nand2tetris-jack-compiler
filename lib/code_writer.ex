@@ -99,8 +99,8 @@ defmodule JackCompiler.CodeWriter do
        M[LCL]=D // LCL = SP
        @#{function}
        0;JMP    // unconditionally jmp to #{function}
-      """],
-      label: return_address
+        (#{return_address})
+      """]
     ]
     {:reply, reply, %{state | symbol_count: count + 1}}
   end
@@ -208,7 +208,7 @@ defmodule JackCompiler.CodeWriter do
 
   @impl true
   def handle_call({:arithmetic, operation}, _from, state) do
-
+    ["// Performing arithmetic #{operation}"] ++
     case operation do
       op when op in [:add, :sub, :or, :and] ->
         perform_operation_on_two_stack_operands(op)
